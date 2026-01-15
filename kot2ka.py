@@ -1,10 +1,10 @@
 #!/bin/env python3
-# Convert kotatsu backup to Kahon backup
+# Convert kotatsu backup to Mihon backup
 # Input format from Kotatsu: zip file with multiple JSON inside
 # Output format for Mihon: protobuf (schema in kahon_backup.proto)
 # Edit distance lib from https://github.com/belambert/edit-distance
 
-# V 0.1: load categories and manga basic data (manga name/URL/category) and export to Kahon format.
+# V 0.1: load categories and manga basic data (manga name/URL/category) and export to Mihon format.
 #        No: read progress, per manga/source prefs.
 
 # How to:
@@ -19,6 +19,7 @@
 # 7. Run this script as './kot2ka.py -k <kotatsu backup> -n <Mihon backup> -o <new Mihon backup to create>'
 # 8. Restore the new Mihon backup. If anything is not to your liking, restore the original Mihon back to undo any changes.
 # 9. Clean up: remove the tempral category "kotatsu_refs" and its mangas. Organize/rename the new categories and their mangas.
+#     You may need to enable "Reindex downloads" so the metadata for each new manga is fetched.
 
 import argparse
 from collections import Counter
@@ -47,17 +48,17 @@ def main(argv):
 # arg parsing
     parser = argparse.ArgumentParser(description='Import tracked mangas from a Kotatsu backup into a Mihon backup.')
     parser.add_argument('-l', '--list', action='store_true', help="List short info about the Kotatsu backup")
-    parser.add_argument('-k', '--kotatsu_backup', help="Kotatsu backup file to read", required=True, metavar='<IN_FILE>')
-    parser.add_argument('-m', '--Mihon_backup', help="Mihon backup file to read", metavar='<IN_FILE>')
-    parser.add_argument('-o', '--Mihon_output', help="Mihon backup file to write", metavar='<OUT_FILE>')
+    parser.add_argument('-k', '--kotatsu_backup', help="Kotatsu backup file to read", required=True, metavar='<IN_FILE>', type=argparse.FileType('rb'))
+    parser.add_argument('-m', '--Mihon_backup', help="Mihon backup file to read", metavar='<IN_FILE>', type=argparse.FileType('rb'))
+    parser.add_argument('-o', '--Mihon_output', help="Mihon backup file to write", metavar='<OUT_FILE>', type=argparse.FileType('wb'))
     conf = parser.parse_args(argv[1:])
-    pprint.pprint(conf)
+    #pprint.pprint(conf)
     if (conf.list and (conf.Mihon_backup is not None or conf.Mihon_output is not None )):
          parser.error(message="Listing Kotatsu metadata must now be mixed with Mihon backups.")
     if (not conf.list and (conf.Mihon_backup is None or conf.Mihon_output is None )):
          parser.error(message="Both Mihon backup files must be configured.")
     proto_file = "kahon_backup.pb2" # ag generateSchemaText, protoc text to pb
-# read and parse Kotatsu backup
+# Read and parse Kotatsu backup
     # Categories id:title map
     archive = zipfile.ZipFile(conf.kotatsu_backup, 'r')
     categories_json = json.loads(archive.read('categories'))
@@ -66,6 +67,7 @@ def main(argv):
     pprint.pprint(categories)
     # Mangas
     mangas_json = json.loads(archive.read('favourites'))
+    archive.close()
     #pprint.pprint(mangas_json)
     mangas = []
     for manga in mangas_json:
@@ -108,6 +110,7 @@ def main(argv):
 
     gunzipped_f=gzip.open(conf.Mihon_backup,'rb')
     gunzipped_data = gunzipped_f.read()
+    gunzipped_f.close()
     backup_msg = backup_class.FromString(gunzipped_data)
     #pprint.pprint(backup_msg)
 # go
@@ -115,7 +118,7 @@ def main(argv):
     print(backup_msg.backupCategories)
     max_cat = max([x.id for x in backup_msg.backupCategories])
     max_ord = max([x.order for x in backup_msg.backupCategories])
-    print((max_cat, max_ord))
+    #print((max_cat, max_ord))
     kot2mih_cat = {}
     for cat_id, cat_name in categories.items():
         max_cat = max_cat + 1
@@ -191,4 +194,5 @@ if __name__ == "__main__":
 # gunzip -c com.amanoteam.kahon_2026-01-03_14-13.tachibk | protoc --decode=Backup kahon_backup.proto > backup_decoded
 # gunzip -c out.tachibk | protoc --decode=Backup kahon_backup.proto
 
+# ./kot2ka.py -k kotatsu_20260103-1359.bk.zip -l
 # ./kot2ka.py -k kotatsu_20260103-1359.bk.zip -m com.amanoteam.kahon_2026-01-03_14-13.tachibk -o out.tachibk
